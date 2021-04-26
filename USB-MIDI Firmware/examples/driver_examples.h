@@ -14,6 +14,8 @@ extern "C" {
 
 void TIMER_Service_example(void);
 
+void TIMER_USB_TX_example(void);
+
 #ifdef __cplusplus
 }
 #endif

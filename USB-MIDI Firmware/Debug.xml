@@ -17,6 +17,7 @@
       <Value>../usb/class</Value>
       <Value>../usb/class/MIDI</Value>
       <Value>../usb/class/MIDI/device</Value>
+      <Value>../ring_buffer</Value>
       <Value>../Config</Value>
       <Value>../</Value>
       <Value>../examples</Value>

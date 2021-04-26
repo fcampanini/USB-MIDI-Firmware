@@ -16,34 +16,53 @@
 volatile bool test;
 
 /*------------------------------TIMER_SERVICE---------------------------------------------*/
-static struct timer_task TIMER_Service_task1, TIMER_Service_task2;
+//This TC (TC0) provide asynch counting for some service function such as heart beat LED
+//and data in and out LED blinks
+static struct timer_task TIMER_Service_task1, TIMER_Service_task2 ;
 static void TIMER_Service_task1_cb(const struct timer_task *const timer_task);
 static void TIMER_Service_task2_cb(const struct timer_task *const timer_task);
 static void TIMER_Service_Load(void);
+/*----------------------------------------------------------------------------------------*/
+
+/*---------------------------------TIMER_USB_TX-------------------------------------------*/
+// This TC (TC2) is providing asynch counting for TX USB MIDI transactions
+static struct timer_task TIMER_USB_TX_task1;
+static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task);
+static void TIMER_USB_TX_Load(void);
 /*----------------------------------------------------------------------------------------*/
 
 /*-----------------------------------USB-MIDI---------------------------------------------*/
 volatile bool isUsbRxLED, isUsbTxLED;
 uint8_t usbRxIndex, usbTxIndex;
 volatile bool isBtnDown;
-struct Buffer MIDI_ring_buffer = {{}, 0, 0};
+struct Buffer MIDI_ring_buffer_rx = {{}, 0, 0}; // Ring buffer for RX incoming data
+struct Buffer MIDI_ring_buffer_tx = {{}, 0, 0}; // Ring buffer for TX outgoing data
 
 /** USB Code Index Number. */
 enum usbMIDI_CIN {
-	USB_MIDI_TWO_BYTES_SYS_COM = 2,
-	USB_MIDI_THREE_BYTES_SYS_COM = 3,
-	USB_MIDI_SYSEX_ST_CONT  = 4,
-	USB_MIDI_ONE_BYTE_SYSEX_END = 5,
-	USB_MIDI_TWO_BYTES_SYSEX_END = 6,
-	USB_MIDI_THREE_BYTES_SYSEX_END = 7,
-	USB_MIDI_NOTE_OFF = 8,
-	USB_MIDI_NOTE_ON = 9,
-	USB_MIDI_POLY_KEY_PRESS = 10,
-	USB_MIDI_CONTROL_CNG = 11,
-	USB_MIDI_PROGRAM_CNG = 12,
-	USB_MIDI_CH_PRESSURE = 13,
-	USB_MIDI_PITCH_BEND = 14,
-	USB_MIDI_ONE_BYTE = 15
+	USB_MIDI_TWO_BYTES_SYS_COM		=	2,
+	USB_MIDI_THREE_BYTES_SYS_COM	=	3,
+	USB_MIDI_SYSEX_ST_CONT			=	4,
+	USB_MIDI_ONE_BYTE_SYSEX_END		=	5,
+	USB_MIDI_TWO_BYTES_SYSEX_END	=	6,
+	USB_MIDI_THREE_BYTES_SYSEX_END	=	7,
+	USB_MIDI_NOTE_OFF				=	8,
+	USB_MIDI_NOTE_ON				=	9,
+	USB_MIDI_POLY_KEY_PRESS			=	10,
+	USB_MIDI_CONTROL_CNG			=	11,
+	USB_MIDI_PROGRAM_CNG			=	12,
+	USB_MIDI_CH_PRESSURE			=	13,
+	USB_MIDI_PITCH_BEND				=	14,
+	USB_MIDI_ONE_BYTE				=	15
+};
+/** MIDI message types */
+enum MIDI_message_type
+{
+	PITCHBEND		=	0,
+	CONTROL_CHANGE	=	1,
+	AFTERTOUCH		=	2,
+	NOTEON			=	3,
+	SYSEX			=	4
 };
 
 /**\Load USB Feature*/
@@ -60,15 +79,51 @@ static uint8_t ctrl_buffer[64];
 COMPILER_ALIGNED(4)
 static uint8_t main_data_buffer[1024];
 
-//Struture containing the content of SYSEX message 
+//Structure containing the content of SYSEX message 
 //already cleaned up from USB overhead bytes
 struct sysex_message{
 	uint8_t buf[64];
 	uint8_t length;
 };
-
 struct sysex_message sysex;	
 volatile uint32_t sysex_size;
+
+//Structure containing NoteOn messages
+//already cleaned up from USB overhead bytes
+struct noteon_message
+{
+	uint8_t buf[3];
+};
+struct noteon_message noteon;
+
+//Structure containing Control Change messages
+//already cleaned up from USB overhead bytes
+struct control_change_message
+{
+	uint8_t buf[3];
+};
+struct control_change_message control_change;
+
+//Structure containing Aftertouch messages
+//already cleaned up from USB overhead bytes
+struct aftertouch_message
+{
+	uint8_t buf[2];
+};
+struct aftertouch_message aftertouch;
+
+//Structure containing Pitchbend messages
+//already cleaned up from USB overhead bytes
+struct pitchbend_message
+{
+	uint8_t buf[3];
+};
+struct pitchbend_message pitchbend;
+/*----------------------------------------------------------------------------------------*/
+
+/*-----------------------------------DISPATCHING---------------------------------------------*/
+/** receive a message and the message type and dispatch the MIDI message */
+void dispatch_message(void* message, enum MIDI_message_type message_type);
 /*----------------------------------------------------------------------------------------*/
 
 
@@ -78,6 +133,7 @@ int main(void)
 	/* Initializes MCU, drivers and middleware */
 	atmel_start_init();
 	TIMER_Service_Load();
+	TIMER_USB_TX_Load();
 	USBMIDI_Load();
 	
 	gpio_set_pin_level(LED_PWR, true);
@@ -99,7 +155,11 @@ int main(void)
 			isBtnDown = true;
 			
 			uint8_t testData[4] = {0x9, 0x90, 0x09, 0x7F};
-			MIDIdf_write(USB_EP_TYPE_BULK, testData, 4);
+			
+			for(uint8_t i = 0; i < 4; i++)
+			{
+				bufferWrite(&MIDI_ring_buffer_tx, testData[i]);
+			}
 		}
 		else if(gpio_get_pin_level(BTN_TEST) == true && isBtnDown == true)
 		{
@@ -107,19 +167,27 @@ int main(void)
 			isBtnDown = false;
 		}
 		
-		if(!isBufferEmpty(&MIDI_ring_buffer))
+		if(!isBufferEmpty(&MIDI_ring_buffer_rx))
 		{
 			uint8_t usbPacket[4];
 			for(uint8_t i = 0; i < 4; i ++)
 			{
-				bufferRead(&MIDI_ring_buffer, &usbPacket[i]);
+				bufferRead(&MIDI_ring_buffer_rx, &usbPacket[i]);
 			}
+			
 			
 			uint8_t start_sysex_byte;
 			switch(usbPacket[0])
 			{
 				case USB_MIDI_NOTE_ON:
 					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
+					
+					noteon.buf[0] = usbPacket[1];
+					noteon.buf[1] = usbPacket[2];
+					noteon.buf[2] = usbPacket[3];
+					
+					dispatch_message(&noteon, NOTEON);
+					
 				break;
 				
 				case USB_MIDI_NOTE_OFF:
@@ -140,6 +208,12 @@ int main(void)
 				
 				case USB_MIDI_CONTROL_CNG:
 					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
+					
+					control_change.buf[0] = usbPacket[1];
+					control_change.buf[1] = usbPacket[2];
+					control_change.buf[2] = usbPacket[3];
+					
+					dispatch_message(&control_change, CONTROL_CHANGE);
 				break;
 				
 				case USB_MIDI_PROGRAM_CNG:
@@ -148,10 +222,22 @@ int main(void)
 				
 				case USB_MIDI_CH_PRESSURE:
 					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
+					
+					aftertouch.buf[0] = usbPacket[1];
+					aftertouch.buf[1] = usbPacket[2];
+					
+					dispatch_message(&aftertouch, AFTERTOUCH);
 				break;
 				
 				case USB_MIDI_PITCH_BEND:
 					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
+					
+					pitchbend.buf[0] = usbPacket[1];
+					pitchbend.buf[1] = usbPacket[2];
+					pitchbend.buf[2] = usbPacket[3];
+					
+					dispatch_message(&pitchbend, PITCHBEND);
+
 				break;
 				
 				case USB_MIDI_ONE_BYTE:
@@ -159,7 +245,8 @@ int main(void)
 				break;
 				
 				case USB_MIDI_SYSEX_ST_CONT:
-				
+					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
+					
 					start_sysex_byte = ((sysex_size / 4) * 3);
 					
 					for(uint8_t i = 0; i < 3; i ++)
@@ -168,8 +255,6 @@ int main(void)
 					}
 					
 					sysex_size += 4;
-					//MIDIdf_write(USB_EP_TYPE_BULK, usbPacket, 4);
-					//delay_us(330);
 				break;
 				
 				case USB_MIDI_ONE_BYTE_SYSEX_END:
@@ -184,6 +269,8 @@ int main(void)
 					sysex_size += 4;
 					sysex.length = (sysex_size - (sysex_size / 4) - 2);
 					sysex_size = 0;
+					
+					dispatch_message(&sysex, SYSEX);
 				break;
 				
 				case USB_MIDI_TWO_BYTES_SYSEX_END:
@@ -198,6 +285,8 @@ int main(void)
 					sysex_size += 4;
 					sysex.length = (sysex_size - (sysex_size / 4) - 1);
 					sysex_size = 0;
+					
+					dispatch_message(&sysex, SYSEX);
 				break;
 				
 				case USB_MIDI_THREE_BYTES_SYSEX_END:
@@ -212,6 +301,8 @@ int main(void)
 					sysex_size += 4;
 					sysex.length = sysex_size - (sysex_size / 4);
 					sysex_size = 0;
+					
+					dispatch_message(&sysex, SYSEX);
 				break;
 			}
 		}
@@ -251,6 +342,21 @@ static void TIMER_Service_task2_cb(const struct timer_task *const timer_task)
 		gpio_set_pin_level(LED_USB_TX, false);
 		usbTxIndex = 0;
 		isUsbTxLED = false;
+	}
+}
+/*----------------------------------------------------------------------------------------*/
+
+/*------------------------------TIMER_USB_TX---------------------------------------------*/
+static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task)
+{
+	if(!isBufferEmpty(&MIDI_ring_buffer_tx))
+	{
+		uint8_t buf[4];
+		for(uint8_t i = 0; i < 4; i ++)
+		{
+			bufferRead(&MIDI_ring_buffer_tx, &buf[i]);
+		}
+		MIDIdf_write(USB_EP_TYPE_BULK, buf, 4);
 	}
 }
 /*----------------------------------------------------------------------------------------*/
@@ -296,7 +402,7 @@ static bool usb_device_cb_bulk_out(const uint8_t ep, const enum usb_xfer_code rc
 {	
 	for(int i = 0; i < count; i++)
 	{
-		bufferWrite(&MIDI_ring_buffer, main_data_buffer[i]);
+		bufferWrite(&MIDI_ring_buffer_rx, main_data_buffer[i]);
 	}
 	
 	isUsbRxLED = true;
@@ -336,6 +442,50 @@ static void TIMER_Service_Load(void)
 }
 /*----------------------------------------------------------------------------------------*/
 
+/*------------------------------TIMER_USB_TX----------------------------------------------*/
+static void TIMER_USB_TX_Load(void)
+{
+	TIMER_USB_TX_task1.interval = 3;
+	TIMER_USB_TX_task1.cb       = TIMER_USB_TX_task1_cb;
+	TIMER_USB_TX_task1.mode     = TIMER_TASK_REPEAT;
+
+	timer_add_task(&TIMER_USB_TX, &TIMER_USB_TX_task1);
+	timer_start(&TIMER_USB_TX);
+}
+/*----------------------------------------------------------------------------------------*/
+
+/*-------------------------------DISPATCHER FOR MIDI MESSAGES-----------------------------*/
+/**
+* Dispatches all the MIDI messages already filtered out from USB protocol overhead data
+* to the correct outbound activities
+**/
+void dispatch_message(void* message, enum MIDI_message_type message_type)
+{
+	switch(message_type)
+	{
+	case PITCHBEND: ;
+		struct pitchbend_message* _pitchbend = (struct pitchbend_message*) message;
+	break;
+	
+	case AFTERTOUCH: ;
+		struct aftertouch_message* _aftertouch = (struct aftertouch_message*) message;
+	break;
+	
+	case CONTROL_CHANGE: ;
+		struct control_change_message* _control_change = (struct control_change_message*) message;
+	break;
+	
+	case NOTEON: ;
+		struct noteon_message* _noteon = (struct noteon_message*) message;
+	break;
+	
+	case SYSEX: ;
+		struct sysex_message* _sysex = (struct sysex_message*) message;
+	break;
+	}
+}
+/*----------------------------------------------------------------------------------------*/
+
 /*-----------------------------------USB-MIDI---------------------------------------------*/
 /**
  * Example of MIDI Function.
@@ -370,25 +520,3 @@ void USBMIDI_Load(void)
 	gpio_set_pin_level(LED_USB_EN, true);
 }
 /*----------------------------------------------------------------------------------------*/
-
-/*
-1)
-  // Start with NULL and a size of 0
-  int *my_time = NULL;
-  size_t sz = 0;
-  
-2)
-  sz = (size_t) ll;
-  void *new_ptr = realloc(my_time, sz * sizeof *my_time);
-  if (new_ptr == NULL && sz != 0) {
-	puts("Out of memory");
-	break;
-  }
-  my_time = new_ptr;
-  
-3)
-  // Clean-up
-  free(my_time);
-  my_time = NULL;
-  sz = 0;
-*/

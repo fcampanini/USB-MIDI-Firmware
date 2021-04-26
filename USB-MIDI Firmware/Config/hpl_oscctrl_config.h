@@ -467,7 +467,7 @@
 // <i> Indicates whether Lock Bypass is enabled or not
 // <id> fdpll0_arch_lbypass
 #ifndef CONF_FDPLL0_LBYPASS
-#define CONF_FDPLL0_LBYPASS 0
+#define CONF_FDPLL0_LBYPASS 1
 #endif
 
 // <o> Lock Time

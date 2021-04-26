@@ -23,10 +23,13 @@ extern "C" {
 
 #include <hal_timer.h>
 #include <hpl_tc_base.h>
+#include <hal_timer.h>
+#include <hpl_tc_base.h>
 
 #include "hal_usb_device.h"
 
 extern struct timer_descriptor TIMER_Service;
+extern struct timer_descriptor TIMER_USB_TX;
 
 void USB_MIDI_CLOCK_init(void);
 void USB_MIDI_init(void);

@@ -36,3 +36,30 @@ void TIMER_Service_example(void)
 	timer_add_task(&TIMER_Service, &TIMER_Service_task2);
 	timer_start(&TIMER_Service);
 }
+
+static struct timer_task TIMER_USB_TX_task1, TIMER_USB_TX_task2;
+
+/**
+ * Example of using TIMER_USB_TX.
+ */
+static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task)
+{
+}
+
+static void TIMER_USB_TX_task2_cb(const struct timer_task *const timer_task)
+{
+}
+
+void TIMER_USB_TX_example(void)
+{
+	TIMER_USB_TX_task1.interval = 100;
+	TIMER_USB_TX_task1.cb       = TIMER_USB_TX_task1_cb;
+	TIMER_USB_TX_task1.mode     = TIMER_TASK_REPEAT;
+	TIMER_USB_TX_task2.interval = 200;
+	TIMER_USB_TX_task2.cb       = TIMER_USB_TX_task2_cb;
+	TIMER_USB_TX_task2.mode     = TIMER_TASK_REPEAT;
+
+	timer_add_task(&TIMER_USB_TX, &TIMER_USB_TX_task1);
+	timer_add_task(&TIMER_USB_TX, &TIMER_USB_TX_task2);
+	timer_start(&TIMER_USB_TX);
+}

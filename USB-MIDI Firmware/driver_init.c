@@ -12,6 +12,7 @@
 #include <hal_init.h>
 
 struct timer_descriptor TIMER_Service;
+struct timer_descriptor TIMER_USB_TX;
 
 /**
  * \brief Timer initialization function
@@ -24,6 +25,19 @@ static void TIMER_Service_init(void)
 	hri_gclk_write_PCHCTRL_reg(GCLK, TC0_GCLK_ID, CONF_GCLK_TC0_SRC | (1 << GCLK_PCHCTRL_CHEN_Pos));
 
 	timer_init(&TIMER_Service, TC0, _tc_get_timer());
+}
+
+/**
+ * \brief Timer initialization function
+ *
+ * Enables Timer peripheral, clocks and initializes Timer driver
+ */
+static void TIMER_USB_TX_init(void)
+{
+	hri_mclk_set_APBBMASK_TC2_bit(MCLK);
+	hri_gclk_write_PCHCTRL_reg(GCLK, TC2_GCLK_ID, CONF_GCLK_TC2_SRC | (1 << GCLK_PCHCTRL_CHEN_Pos));
+
+	timer_init(&TIMER_USB_TX, TC2, _tc_get_timer());
 }
 
 void USB_MIDI_PORT_init(void)
@@ -231,5 +245,6 @@ void system_init(void)
 	gpio_set_pin_function(BTN_TEST, GPIO_PIN_FUNCTION_OFF);
 
 	TIMER_Service_init();
+	TIMER_USB_TX_init();
 	USB_MIDI_init();
 }
