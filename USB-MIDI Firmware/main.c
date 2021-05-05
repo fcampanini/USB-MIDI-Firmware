@@ -1,8 +1,17 @@
-/*
-* main.c
+/**
+*Copyright 2021 Filippo Campanini
 *
-* Created: 03/01/2021 00:48:14
-*  Author: Filippo Campanini
+*CC BY-NC-SA License
+*
+*http://creativecommons.org/licenses/by-nc-sa/4.0/
+*
+*NOTICES
+*THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+*INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+*IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+*WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+*OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*
 */
 
 #include <atmel_start.h>
@@ -11,29 +20,31 @@
 #include "RingBuffer.h"
 
 
-/*################################ PROTOTYPES AND VARIABLES##################################*/
+
+/*------------------------------------------------------PROTOTYPES AND VARIABLES--------------------------------------------------------*/
 
 volatile bool test;
 
-/*------------------------------TIMER_SERVICE---------------------------------------------*/
-//This TC (TC0) provide asynch counting for some service function such as heart beat LED
+/*--------------------TIMER_SERVICE--------------------*/
+//This TC (TC0) provide asynch counting for 
+//some service function such as heart beat LED
 //and data in and out LED blinks
 static struct timer_task TIMER_Service_task1, TIMER_Service_task2 ;
 static void TIMER_Service_task1_cb(const struct timer_task *const timer_task);
 static void TIMER_Service_task2_cb(const struct timer_task *const timer_task);
 static void TIMER_Service_Load(void);
-/*----------------------------------------------------------------------------------------*/
 
-/*---------------------------------TIMER_USB_TX-------------------------------------------*/
-// This TC (TC2) is providing asynch counting for TX USB MIDI transactions
+/*----------------------TIMER_USB_TX--------------------*/
+// This TC (TC2) is providing asynch counting 
+// for TX USB MIDI transactions
 static struct timer_task TIMER_USB_TX_task1;
 static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task);
 static void TIMER_USB_TX_Load(void);
-/*----------------------------------------------------------------------------------------*/
 
-/*-----------------------------------USB-MIDI---------------------------------------------*/
-volatile bool isUsbRxLED, isUsbTxLED;
+
+/*------------------------USB-MIDI----------------------*/
 uint8_t usbRxIndex, usbTxIndex;
+volatile bool isUsbRxLED, isUsbTxLED;
 volatile bool isBtnDown;
 struct Buffer MIDI_ring_buffer_rx = {{}, 0, 0}; // Ring buffer for RX incoming data
 struct Buffer MIDI_ring_buffer_tx = {{}, 0, 0}; // Ring buffer for TX outgoing data
@@ -119,15 +130,14 @@ struct pitchbend_message
 	uint8_t buf[3];
 };
 struct pitchbend_message pitchbend;
-/*----------------------------------------------------------------------------------------*/
 
-/*-----------------------------------DISPATCHING---------------------------------------------*/
-/** receive a message and the message type and dispatch the MIDI message */
+/*-----------------------DISPATCHING-------------------------------*/
+/** receive a message and the message 
+* type and dispatch the MIDI message */
 void dispatch_message(void* message, enum MIDI_message_type message_type);
-/*----------------------------------------------------------------------------------------*/
 
 
-/*####################################### MAIN #############################################*/
+/*------------------------------------------------------------MAIN--------------------------------------------------------------------*/
 int main(void)
 {
 	/* Initializes MCU, drivers and middleware */
@@ -309,10 +319,9 @@ int main(void)
 	}
 }
 
+/*-------------------------------------------------------EVENT HANDLERS---------------------------------------------------------------*/
 
-/*#################################### EVENT HANDLERS ######################################*/
-
-/*------------------------------TIMER_SERVICE---------------------------------------------*/
+/*---------------------TIMER_SERVICE------------------------------*/
 static void TIMER_Service_task1_cb(const struct timer_task *const timer_task)
 {
 	gpio_toggle_pin_level(LED_PULSE);
@@ -344,9 +353,9 @@ static void TIMER_Service_task2_cb(const struct timer_task *const timer_task)
 		isUsbTxLED = false;
 	}
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*------------------------------TIMER_USB_TX---------------------------------------------*/
+
+/*---------------------TIMER_USB_TX-------------------------------*/
 static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task)
 {
 	if(!isBufferEmpty(&MIDI_ring_buffer_tx))
@@ -359,9 +368,9 @@ static void TIMER_USB_TX_task1_cb(const struct timer_task *const timer_task)
 		MIDIdf_write(USB_EP_TYPE_BULK, buf, 4);
 	}
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*-----------------------------------USB-MIDI---------------------------------------------*/
+
+/*----------------------USB-MIDI----------------------------------*/
 /**
  * \brief Ctrl endpointer out transfer callback function
  * \param[in] count data amount to transfer
@@ -422,11 +431,11 @@ static bool usb_device_cb_bulk_in(const uint8_t ep, const enum usb_xfer_code rc,
 	isUsbTxLED = true;
 	return false;
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*#################################### PRIVATE FUNCTIONS ######################################*/
 
-/*------------------------------TIMER_SERVICE---------------------------------------------*/
+/*--------------------------------------------------------PRIVATE FUNCTIONS----------------------------------------------------------*/
+
+/*--------------------TIMER_SERVICE----------------------------*/
 static void TIMER_Service_Load(void)
 {
 	TIMER_Service_task1.interval = 1000;
@@ -440,9 +449,9 @@ static void TIMER_Service_Load(void)
 	timer_add_task(&TIMER_Service, &TIMER_Service_task2);
 	timer_start(&TIMER_Service);
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*------------------------------TIMER_USB_TX----------------------------------------------*/
+
+/*---------------------TIMER_USB_TX----------------------------*/
 static void TIMER_USB_TX_Load(void)
 {
 	TIMER_USB_TX_task1.interval = 3;
@@ -452,9 +461,9 @@ static void TIMER_USB_TX_Load(void)
 	timer_add_task(&TIMER_USB_TX, &TIMER_USB_TX_task1);
 	timer_start(&TIMER_USB_TX);
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*-------------------------------DISPATCHER FOR MIDI MESSAGES-----------------------------*/
+
+/*-------------DISPATCHER FOR MIDI MESSAGES--------------------*/
 /**
 * Dispatches all the MIDI messages already filtered out from USB protocol overhead data
 * to the correct outbound activities
@@ -484,9 +493,9 @@ void dispatch_message(void* message, enum MIDI_message_type message_type)
 	break;
 	}
 }
-/*----------------------------------------------------------------------------------------*/
 
-/*-----------------------------------USB-MIDI---------------------------------------------*/
+
+/*---------------------USB-MIDI--------------------------------*/
 /**
  * Example of MIDI Function.
  * \note
@@ -519,4 +528,4 @@ void USBMIDI_Load(void)
 	};
 	gpio_set_pin_level(LED_USB_EN, true);
 }
-/*----------------------------------------------------------------------------------------*/
+
